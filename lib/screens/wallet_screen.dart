@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:web3dart/web3dart.dart';
+import 'package:walletconnect_dart/walletconnect_dart.dart';
 import 'package:http/http.dart';
 
 class WalletScreen extends StatefulWidget {
@@ -8,55 +8,112 @@ class WalletScreen extends StatefulWidget {
 }
 
 class _WalletScreenState extends State<WalletScreen> {
-  late Web3Client _web3client;
+  final _formKey = GlobalKey<FormState>();
+  late WalletConnect connector;
   String currentAddress = "";
   bool isConnected = false;
-  final String rpcUrl =
-      "https://mainnet.infura.io/v3/YOUR_INFURA_PROJECT_ID"; // Replace with your Infura Project ID
+  String nickname = "";
 
   @override
   void initState() {
     super.initState();
-    _web3client = Web3Client(rpcUrl, Client());
+    connector = WalletConnect(
+      bridge: 'https://bridge.walletconnect.org',
+      clientMeta: PeerMeta(
+        name: 'Flutter App',
+        description: 'A MetaMask Flutter integration',
+        url: 'https://flutter.dev',
+        icons: ['https://flutter.dev/favicon.ico'],
+      ),
+    );
   }
 
-  Future<void> connectWallet() async {
-    // For demonstration purposes, we're just displaying a sample address.
-    // Actual connection with MetaMask will involve using WalletConnect or a browser extension.
-    setState(() {
-      currentAddress = "0x1234567890abcdef1234567890abcdef12345678";
-      isConnected = true;
-    });
+  void connectWallet() async {
+    if (!connector.connected) {
+      try {
+        final session = await connector.connect(
+          chainId: 1,
+          onDisplayUri: (uri) => print(uri),
+        );
+        setState(() {
+          currentAddress = session.accounts[0];
+          isConnected = true;
+        });
+      } catch (e) {
+        print('Error: $e');
+      }
+    }
   }
 
   void disconnectWallet() {
+    connector.killSession();
     setState(() {
       currentAddress = "";
       isConnected = false;
     });
   }
 
+  void saveWalletInfo() {
+    if (_formKey.currentState!.validate()) {
+      _formKey.currentState!.save();
+      print('Nickname: $nickname');
+      // Save nickname and other info to a database or local storage
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('MetaMask Integration')),
+      appBar: AppBar(title: Text('WalletConnect Integration')),
       body: Center(
-        child: isConnected
-            ? Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text('Connected Address: $currentAddress'),
-                  SizedBox(height: 16.0),
-                  ElevatedButton(
-                    onPressed: disconnectWallet,
-                    child: Text('Disconnect Wallet'),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            isConnected
+                ? Column(
+                    children: [
+                      Text('Connected Address: $currentAddress'),
+                      SizedBox(height: 16.0),
+                      ElevatedButton(
+                        onPressed: disconnectWallet,
+                        child: Text('Disconnect Wallet'),
+                      ),
+                      SizedBox(height: 20.0),
+                      Form(
+                        key: _formKey,
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            children: [
+                              TextFormField(
+                                decoration: InputDecoration(labelText: 'Nickname'),
+                                validator: (value) {
+                                  if (value == null || value.isEmpty) {
+                                    return 'Please enter a nickname';
+                                  }
+                                  return null;
+                                },
+                                onSaved: (value) {
+                                  nickname = value ?? "";
+                                },
+                              ),
+                              SizedBox(height: 20.0),
+                              ElevatedButton(
+                                onPressed: saveWalletInfo,
+                                child: Text('Save Wallet Info'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                : ElevatedButton(
+                    onPressed: connectWallet,
+                    child: Text('Connect to MetaMask'),
                   ),
-                ],
-              )
-            : ElevatedButton(
-                onPressed: connectWallet,
-                child: Text('Connect to MetaMask'),
-              ),
+          ],
+        ),
       ),
     );
   }
